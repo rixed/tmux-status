@@ -96,7 +96,7 @@ sub to_bytes {
       }
     }
   }
-  if ($v > 0 || $s eq '') { $s = sprintf('%s%d', $s, $v); }
+  if ($used_scales < 2 and ($v > 0 || $s eq '')) { $s = sprintf('%s%d', $s, $v); }
   return $s;
 }
 
