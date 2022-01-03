@@ -1,0 +1,194 @@
+#!/usr/bin/perl
+use Time::HiRes qw(gettimeofday);
+use Fcntl qw(:flock SEEK_END);
+use List::Util qw(max);
+
+my $dev = $ARGV[0];
+if ($dev eq '') { $dev = 'wlo1'; }
+my $statdir = "/sys/class/net/$dev/statistics/";
+my $statefile = "$ENV{HOME}/.cache/status-cpu-net";
+my $bg = 235; # Default bg color
+my $fg = 245; # Default fg color
+
+sub trim {
+  my $s = shift;
+  $s =~ s/^\s+|\s+$//g;
+  return $s;
+}
+
+sub readline {
+  my $f = shift;
+  open my $file, '<', $f;
+  my $s = <$file>;
+  close $file;
+  return &trim($s);
+}
+
+sub loadavg {
+  # Sample output:
+  # 0.18 0.13 0.09 1/866 14948
+  my $load = &readline('/proc/loadavg');
+  if ($load =~ /^([0-9.]*) /) {
+    return $1;
+  } else {
+    return 0.;
+  }
+}
+
+# Read past values
+unless (-e $statefile) {
+  open my $tmp, '>', $statefile;
+  print $tmp "0\n0\n0\n0\n";
+  close $tmp;
+}
+
+open my $state, '+<', $statefile or die "Cannot open $statefile: $!\n";
+flock($state, LOCK_EX) or die "Cannot lock $statefile: $!\n";
+
+# Read the csv in an array:
+my @data = ();
+while (my $line = <$state>) {
+  chomp $line;
+  my ($ts, $load, $rx, $tx) = split ' ', $line;
+  push(@data, [$ts, $load, $rx, $tx]);
+}
+
+# Append current values:
+my $ts = gettimeofday();
+my $load = &loadavg;
+my $rx = &readline("$statdir/rx_bytes");
+my $tx = &readline("$statdir/tx_bytes");
+push(@data, [$ts, $load, $rx, $tx]);
+
+# Truncate to desired length:
+my $history = 16;
+if ($#data + 1 > $history) {
+  splice @data, 0, -$history;
+}
+
+# Save it
+seek $state, 0, 0;
+truncate $state, 0;
+for my $line (@data) {
+  print $state join(' ', @$line), "\n";
+}
+close $state;
+
+#
+# Display
+#
+
+sub to_bytes {
+  my $v = shift;
+
+  my @scales = (1024*1024*1024, 1024*1024, 1024);
+  my @syms = ('G', 'M', 'K');
+
+  my $s = '';
+  my $used_scales = 0;
+  for (my $i = 0; $i <= $#scales and $used_scales < 2; $i++) {
+    if ($v >= $scales[$i]) {
+      $used_scales++;
+      my $hi = int($v / $scales[$i]);
+      if ($hi > 0) {
+        $s = sprintf('%s%d%s', $s, $hi, $syms[$i]);
+        $v -= $hi * $scales[$i];
+      }
+    }
+  }
+  if ($v > 0 || $s eq '') { $s = sprintf('%s%d', $s, $v); }
+  return $s;
+}
+
+sub color {
+  my $v = shift;
+  $v = $bg + $v*2;
+  return "#[fg=colour$v]";
+}
+sub sparkline {
+  my $idx = shift;
+  my $is_rate = shift;
+  my $max_min = shift;
+
+  my $prev_ts;
+  my $prev_v;
+  my @vs;
+  for my $line (@data) {
+    my $v = $line->[$idx];
+    if ($is_rate) {
+      my $ts = $line->[0];
+      if ($prev_ts > 0) {
+        my $dt = $ts - $prev_ts;
+        $v = ($v - $prev_v) / $dt;
+        $prev_ts = $ts;
+        $prev_v = $line->[$idx];
+      } else {
+        $prev_ts = $ts;
+        $prev_v = $v;
+        next;
+      }
+    }
+    push(@vs, $v);
+  }
+
+  my $max_v = max @vs;
+  my $max = max ($max_v, $max_min);
+
+  # Build the sparkline proper:
+  my $sline = '';
+  # Taken from btop (note: we use it transposed, as we scroll from the left):
+  my @sparks = ( [ ' ', '⢀', '⢠', '⢰', '⢸' ],
+                 [ '⡀', '⣀', '⣠', '⣰', '⣸' ],
+                 [ '⡄', '⣄', '⣤', '⣴', '⣼' ],
+                 [ '⡆', '⣆', '⣦', '⣶', '⣾' ],
+                 [ '⡇', '⣇', '⣧', '⣷', '⣿' ] );
+
+  my $prev = -1;
+  my $num_sparks = 5;
+  for my $v (@vs) {
+    my $rv = int($num_sparks * $v / $max);
+    if ($rv >= $num_sparks) { $rv = $num_sparks-1; } elsif ($rv < 0) { $rv = 0; };
+    if ($prev >= 0) {
+      $sline = &color($rv+$prev) . $sparks[$rv][$prev] . $sline;
+      $prev = -1;
+    } else {
+      $prev = $rv;
+    }
+  }
+  if ($prev >= 0) {
+    $sline = &color($rv+$prev) . $sparks[$rv][$prev] . $sline;
+  }
+  $sline .= "#[fg=colour$fg]";
+
+  # last value is printed in digits:
+  my $last = $vs[$#vs];
+  if ($idx eq 1) {
+    $last = sprintf('%.2f/%.2f', $last, $max_v);
+  } else {
+    $last = sprintf('%17s', &to_bytes($last).'/'.&to_bytes($max_v));
+  }
+  return $last.':'.$sline;
+}
+
+# Finally, battery status:
+
+# Sample output:
+# Battery 0: Discharging, 97%, 10:02:32 remaining
+my $bat = '';
+my $s = `acpi -b`;
+if ($s =~ /Battery 0: (.*), (.*)%, (.*) remaining/) {
+  my ($status, $perc, $rem) = ($1, $2, $3);
+  my $go_down = 0;
+  if ($status eq 'Discharging') {
+    $status = '↓';
+    $go_down = 1;
+  } elsif ($status eq 'Charging') {
+    $status = '↑';
+  } else { $status = '?' }
+  $bat = "$status$perc%";
+  if ($perc < 15 and $go_down) {
+    $bat = '#[fg=colour1]'.$bat."#[fg=colour$fg]";
+  }
+}
+printf("💻:%s 🡽:%s 🢆:%s 🔋:%s\n",
+  &sparkline(1, 0, 8), &sparkline(2, 1, 100), &sparkline(3, 1, 100), $bat);
