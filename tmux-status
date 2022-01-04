@@ -166,7 +166,8 @@ sub sparkline {
   } else {
     $last = sprintf('%s', &to_bytes($last).'/'.&to_bytes($max_v));
   }
-  return $last.$sep.$sline;
+  my $darker = $bg-1;
+  return $last.$sep."#[bg=colour$darker]$sline#[bg=colour$bg]";
 }
 
 # Finally, battery status:
