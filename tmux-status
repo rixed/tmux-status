@@ -176,19 +176,23 @@ sub sparkline {
 # Battery 0: Discharging, 97%, 10:02:32 remaining
 my $bat = '';
 my $s = `acpi -b`;
-if ($s =~ /Battery 0: (.*), (.*)%, (.*) remaining/) {
-  my ($status, $perc, $rem) = ($1, $2, $3);
-  my $go_down = 0;
-  if ($status eq 'Discharging') {
-    $status = '↓';
-    $go_down = 1;
-  } elsif ($status eq 'Charging') {
-    $status = '↑';
-  } else { $status = '?' }
-  $bat = "$status$perc%";
-  if ($perc < 15 and $go_down) {
+if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
+  my ($perc, $rem) = ($1, $2);
+  $bat = "↓$perc%";
+  if ($perc < 15) {
     $bat = '#[fg=colour1]'.$bat."#[fg=colour$fg]";
+  } elsif ($perc > 90) {
+    $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
   }
+} elsif ($s =~ /Battery .: Charging, (.*)%, (.*) remaining/) {
+  my ($perc, $rem) = ($1, $2);
+  $bat = "↑$perc%";
+  if ($perc > 90) {
+    $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
+  }
+} elsif ($s =~ /Battery .: Not charging, (.*)%/) {
+  my $perc = $1;
+  $bat = "🔌$perc%";
 }
 printf("💻:%s 🡽:%s 🢆:%s 🔋:%s\n",
   &sparkline(1, 0, 8), &sparkline(2, 1, 100), &sparkline(3, 1, 100), $bat);
