@@ -2,11 +2,12 @@
 use Time::HiRes qw(gettimeofday);
 use Fcntl qw(:flock SEEK_END);
 use List::Util qw(max);
+use utf8;
 
 my $dev = $ARGV[0];
 if ($dev eq '') { $dev = 'wlo1'; }
 my $statdir = "/sys/class/net/$dev/statistics/";
-my $statefile = "$ENV{HOME}/.cache/status-cpu-net";
+my $statefile = "$ENV{HOME}/.cache/tmux-status";
 my $bg = 235; # Default bg color
 my $fg = 245; # Default fg color
 
@@ -61,7 +62,7 @@ my $tx = &readline("$statdir/tx_bytes");
 push(@data, [$ts, $load, $rx, $tx]);
 
 # Truncate to desired length:
-my $history = 16;
+my $history = 24;
 if ($#data + 1 > $history) {
   splice @data, 0, -$history;
 }
@@ -163,9 +164,9 @@ sub sparkline {
   if ($idx eq 1) {
     $last = sprintf('%.2f/%.2f', $last, $max_v);
   } else {
-    $last = sprintf('%17s', &to_bytes($last).'/'.&to_bytes($max_v));
+    $last = sprintf('%s', &to_bytes($last).'/'.&to_bytes($max_v));
   }
-  return $last.':'.$sline;
+  return $last.$sep.$sline;
 }
 
 # Finally, battery status:
@@ -192,5 +193,28 @@ if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
   my $perc = $1;
   $bat = "🔌$perc%";
 }
-printf("💻:%s 🡽:%s 🢆:%s 🔋:%s\n",
-  &sparkline(1, 0, 8), &sparkline(2, 1, 100), &sparkline(3, 1, 100), $bat);
+
+#
+# Final layout
+#
+
+sub padd {
+  # TODO: padd a string despite its '#[...]' tags.
+  my ($s, $l) = @_;
+
+  my $tagless = $s;
+  $tagless =~ s/#\[.*?\]//g;
+  my $len = length($tagless);
+
+  if ($len >= $l) { return $s; }
+#  print "len=$len, desired=$l\n";
+  return (" " x ($l - $len)).$s;
+}
+
+my $sparklen = int($history/2) + 3 + 8*2;
+
+printf("%s %s %s 🔋:%s\n",
+  &padd(&sparkline('💻', 1, 0, 8), 12),
+  &padd(&sparkline('🡽', 2, 1, 100), $sparklen),
+  &padd(&sparkline('🢆', 3, 1, 100), $sparklen),
+  &padd($bat, 7));
