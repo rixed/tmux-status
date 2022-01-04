@@ -184,7 +184,7 @@ if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
   } elsif ($perc > 90) {
     $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
   }
-} elsif ($s =~ /Battery .: Charging, (.*)%, (.*) remaining/) {
+} elsif ($s =~ /Battery .: Charging, (.*)%, (.*) until charged/) {
   my ($perc, $rem) = ($1, $2);
   $bat = "↑$perc%";
   if ($perc > 90) {
