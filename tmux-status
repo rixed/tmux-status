@@ -106,9 +106,7 @@ sub color {
   return "#[fg=colour$v]";
 }
 sub sparkline {
-  my $idx = shift;
-  my $is_rate = shift;
-  my $max_min = shift;
+  my ($sep, $idx, $is_rate, $max_min) = @_;
 
   my $prev_ts;
   my $prev_v;
