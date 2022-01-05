@@ -216,6 +216,6 @@ my $sparklen = int($history/2) + 3 + 8*2;
 
 printf("%s %s %s 🔋:%s\n",
   &padd(&sparkline('💻', 1, 0, 8), 12),
-  &padd(&sparkline('🡽', 2, 1, 100), $sparklen),
-  &padd(&sparkline('🢆', 3, 1, 100), $sparklen),
+  &padd(&sparkline('🢆', 2, 1, 100), $sparklen),
+  &padd(&sparkline('🡽', 3, 1, 100), $sparklen),
   &padd($bat, 7));
