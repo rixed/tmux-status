@@ -190,9 +190,10 @@ if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
   if ($perc > 90) {
     $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
   }
-} elsif ($s =~ /Battery .: Not charging, (.*)%/) {
-  my $perc = $1;
+} elsif ($s =~ /Battery .: (Not charging|Full), (.*)%/) {
+  my $perc = $2;
   $bat = "🔌$perc%";
+  $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
 }
 
 #
