@@ -55,11 +55,11 @@ while (my $line = <$state>) {
 }
 
 # Append current values:
-my $ts = gettimeofday();
+my $now = gettimeofday();
 my $load = &loadavg;
 my $rx = &readline("$statdir/rx_bytes");
 my $tx = &readline("$statdir/tx_bytes");
-push(@data, [$ts, $load, $rx, $tx]);
+push(@data, [$now, $load, $rx, $tx]);
 
 # Truncate to desired length:
 my $history = 24;
@@ -179,7 +179,10 @@ my $s = `acpi -b`;
 if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
   my ($perc, $rem) = ($1, $2);
   $bat = "↓$perc%";
-  if ($perc < 15) {
+  if ($perc <= 5) {
+    $c = 196 + ($now % 6);
+    $bat = "#[fg=colour$c]$bat#[fg=colour$fg]";
+  } elsif ($perc < 15) {
     $bat = '#[fg=colour1]'.$bat."#[fg=colour$fg]";
   } elsif ($perc > 90) {
     $bat = '#[fg=colour40]'.$bat."#[fg=colour$fg]";
