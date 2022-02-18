@@ -39,7 +39,7 @@ sub loadavg {
 # Read past values
 unless (-e $statefile) {
   open my $tmp, '>', $statefile;
-  print $tmp "0\n0\n0\n0\n";
+  print $tmp "0 0 0 0 0\n";
   close $tmp;
 }
 
@@ -50,8 +50,8 @@ flock($state, LOCK_EX) or die "Cannot lock $statefile: $!\n";
 my @data = ();
 while (my $line = <$state>) {
   chomp $line;
-  my ($ts, $load, $rx, $tx) = split ' ', $line;
-  push(@data, [$ts, $load, $rx, $tx]);
+  my ($ts, $load, $rx, $tx, $seq) = split ' ', $line;
+  push(@data, [$ts, $load, $rx, $tx, $seq]);
 }
 
 # Append current values:
@@ -59,7 +59,8 @@ my $now = gettimeofday();
 my $load = &loadavg;
 my $rx = &readline("$statdir/rx_bytes");
 my $tx = &readline("$statdir/tx_bytes");
-push(@data, [$now, $load, $rx, $tx]);
+my $seq = $data[$#data]->[4] + 1;
+push(@data, [$now, $load, $rx, $tx, $seq]);
 
 # Truncate to desired length:
 my $history = 24;
@@ -180,7 +181,7 @@ if ($s =~ /Battery .: Discharging, (.*)%, (.*) remaining/) {
   my ($perc, $rem) = ($1, $2);
   $bat = "↓$perc%";
   if ($perc <= 5) {
-    $c = 196 + ($now % 6);
+    $c = ($seq % 2) eq 1 ? 196 : $bg ;
     $bat = "#[fg=colour$c]$bat#[fg=colour$fg]";
   } elsif ($perc < 15) {
     $bat = '#[fg=colour1]'.$bat."#[fg=colour$fg]";
